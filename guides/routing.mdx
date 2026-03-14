@@ -1,0 +1,322 @@
+---
+title: 'Routing'
+description: 'Create routes and API endpoints in Express'
+icon: 'route'
+---
+
+## Overview
+
+The Backend Template uses Express.js routing to organize API endpoints. Routes are centralized in the `src/routes/` directory and mounted in the main application.
+
+## Router Structure
+
+The main router is defined in `src/routes/index.js`:
+
+```javascript
+const express = require('express');
+const router = express.Router();
+
+// colocar las rutas aquí 
+//router.use('/name',routerName) example
+
+module.exports = router;
+```
+
+This router is mounted in `src/app.js:18`:
+
+```javascript
+const router = require('./routes');
+
+app.use(router);
+```
+
+## Creating a New Route File
+
+<Steps>
+  <Step title="Create the route file">
+    Create a new file in `src/routes/` for your resource:
+    ```bash
+    touch src/routes/user.routes.js
+    ```
+  </Step>
+
+  <Step title="Define the routes">
+    Set up the router with your endpoints:
+    ```javascript
+    const express = require('express');
+const router = express.Router();
+const catchError = require('../utils/catchError');
+const { getAll, create, getOne, remove, update } = require('../controllers/user.controllers');
+
+router.route('/')
+    .get(catchError(getAll))
+    .post(catchError(create));
+
+router.route('/:id')
+    .get(catchError(getOne))
+    .delete(catchError(remove))
+    .put(catchError(update));
+
+module.exports = router;
+    ```
+  </Step>
+
+  <Step title="Register in main router">
+    Import and mount in `src/routes/index.js`:
+    ```javascript
+    const express = require('express');
+const router = express.Router();
+const userRouter = require('./user.routes');
+
+router.use('/users', userRouter);
+
+module.exports = router;
+    ```
+  </Step>
+</Steps>
+
+<Note>
+  Routes mounted at `/users` will be accessible at `http://localhost:8080/users`
+</Note>
+
+## Using catchError Utility
+
+The `catchError` utility wraps async controllers to handle promise rejections automatically.
+
+### Implementation
+
+```javascript
+const catchError = controller => {
+    return (req, res, next) => {
+        controller(req, res, next)
+            .catch(next);
+    }
+}
+
+module.exports = catchError
+```
+
+### Why Use catchError?
+
+<CardGroup cols={2}>
+  <Card title="Automatic Error Handling" icon="shield-check">
+    Catches async errors and passes them to the error handler middleware automatically.
+  </Card>
+
+  <Card title="Cleaner Code" icon="code">
+    Eliminates the need for try-catch blocks in every controller function.
+  </Card>
+
+  <Card title="Consistent Error Flow" icon="arrows-split-up-and-left">
+    Ensures all errors reach the centralized error handler for uniform responses.
+  </Card>
+
+  <Card title="Less Boilerplate" icon="minimize">
+    Reduces repetitive error handling code across your application.
+  </Card>
+</CardGroup>
+
+### Example Usage
+
+**Without catchError:**
+```javascript
+router.get('/', async (req, res, next) => {
+    try {
+        const users = await User.findAll();
+        return res.json(users);
+    } catch (error) {
+        next(error);
+    }
+});
+```
+
+**With catchError:**
+```javascript
+const getAll = async (req, res) => {
+    const users = await User.findAll();
+    return res.json(users);
+};
+
+router.get('/', catchError(getAll));
+```
+
+<Tip>
+  Always wrap async route handlers with `catchError` to ensure errors are properly caught.
+</Tip>
+
+## Route Organization Patterns
+
+### By Resource (Recommended)
+
+Organize routes by the resource they manage:
+
+```
+src/routes/
+├── index.js           # Main router
+├── user.routes.js     # User endpoints
+├── product.routes.js  # Product endpoints
+└── order.routes.js    # Order endpoints
+```
+
+### Mounting Multiple Routers
+
+```javascript
+const express = require('express');
+const router = express.Router();
+const userRouter = require('./user.routes');
+const productRouter = require('./product.routes');
+const orderRouter = require('./order.routes');
+
+router.use('/users', userRouter);
+router.use('/products', productRouter);
+router.use('/orders', orderRouter);
+
+module.exports = router;
+```
+
+## CRUD Route Examples
+
+### Complete CRUD Implementation
+
+<CodeGroup>
+```javascript src/routes/product.routes.js
+const express = require('express');
+const router = express.Router();
+const catchError = require('../utils/catchError');
+const {
+    getAll,
+    create,
+    getOne,
+    remove,
+    update
+} = require('../controllers/product.controllers');
+
+// GET /products - List all products
+// POST /products - Create a product
+router.route('/')
+    .get(catchError(getAll))
+    .post(catchError(create));
+
+// GET /products/:id - Get one product
+// DELETE /products/:id - Delete a product
+// PUT /products/:id - Update a product
+router.route('/:id')
+    .get(catchError(getOne))
+    .delete(catchError(remove))
+    .put(catchError(update));
+
+module.exports = router;
+```
+
+```javascript src/controllers/product.controllers.js
+const Product = require('../models/Product');
+
+const getAll = async (req, res) => {
+    const results = await Product.findAll();
+    return res.json(results);
+};
+
+const create = async (req, res) => {
+    const result = await Product.create(req.body);
+    return res.status(201).json(result);
+};
+
+const getOne = async (req, res) => {
+    const { id } = req.params;
+    const result = await Product.findByPk(id);
+    if (!result) return res.sendStatus(404);
+    return res.json(result);
+};
+
+const remove = async (req, res) => {
+    const { id } = req.params;
+    const result = await Product.destroy({ where: { id } });
+    if (!result) return res.sendStatus(404);
+    return res.sendStatus(204);
+};
+
+const update = async (req, res) => {
+    const { id } = req.params;
+    const result = await Product.update(
+        req.body,
+        { where: { id }, returning: true }
+    );
+    if (result[0] === 0) return res.sendStatus(404);
+    return res.json(result[1][0]);
+};
+
+module.exports = {
+    getAll,
+    create,
+    getOne,
+    remove,
+    update
+};
+```
+</CodeGroup>
+
+## Route Parameters and Query Strings
+
+### URL Parameters
+
+```javascript
+// Route definition
+router.get('/users/:id/posts/:postId', catchError(getPost));
+
+// Controller
+const getPost = async (req, res) => {
+    const { id, postId } = req.params;
+    // Access: /users/123/posts/456
+    // id = '123', postId = '456'
+};
+```
+
+### Query Parameters
+
+```javascript
+const getAll = async (req, res) => {
+    const { page, limit, sort } = req.query;
+    // Access: /products?page=1&limit=10&sort=price
+    // page = '1', limit = '10', sort = 'price'
+};
+```
+
+## Nested Routes
+
+For related resources:
+
+```javascript
+// src/routes/user.routes.js
+const postRouter = require('./post.routes');
+
+// Mount posts under users
+router.use('/:userId/posts', postRouter);
+```
+
+## Best Practices
+
+<Steps>
+  <Step title="Use catchError for async handlers">
+    Always wrap async route handlers with the `catchError` utility to ensure proper error handling.
+  </Step>
+
+  <Step title="Follow RESTful conventions">
+    Use standard HTTP methods (GET, POST, PUT, DELETE) and resource-based URLs.
+  </Step>
+
+  <Step title="Organize by resource">
+    Keep related routes in dedicated files (e.g., `user.routes.js`, `product.routes.js`).
+  </Step>
+
+  <Step title="Use route chaining">
+    Group routes with the same path using `router.route()` for cleaner code.
+  </Step>
+
+  <Step title="Validate input">
+    Add validation middleware before controllers to ensure data integrity.
+  </Step>
+</Steps>
+
+<Warning>
+  Always use `catchError` wrapper for async controllers. Without it, unhandled promise rejections won't be caught by the error handler middleware.
+</Warning>

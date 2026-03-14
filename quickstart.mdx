@@ -1,80 +1,425 @@
 ---
 title: "Quickstart"
-description: "Start building awesome documentation in minutes"
+description: "Get your Backend Template server running and create your first API endpoint in under 10 minutes"
 ---
 
-## Get started in three steps
+## Prerequisites
 
-Get your documentation site running locally and make your first customization.
+Before you begin, ensure you have the following installed:
 
-### Step 1: Set up your local environment
-
-<AccordionGroup>
-  <Accordion icon="copy" title="Clone your docs locally">
-    During the onboarding process, you created a GitHub repository with your docs content if you didn't already have one. You can find a link to this repository in your [dashboard](https://dashboard.mintlify.com).
-    
-    To clone the repository locally so that you can make and preview changes to your docs, follow the [Cloning a repository](https://docs.github.com/en/repositories/creating-and-managing-repositories/cloning-a-repository) guide in the GitHub docs.
-  </Accordion>
-  <Accordion icon="rectangle-terminal" title="Start the preview server">
-    1. Install the Mintlify CLI: `npm i -g mint`
-    2. Navigate to your docs directory and run: `mint dev`
-    3. Open `http://localhost:3000` to see your docs live!
-    
-    <Tip>Your preview updates automatically as you edit files.</Tip>
-  </Accordion>
-</AccordionGroup>
-
-### Step 2: Deploy your changes
-
-<AccordionGroup>
-  <Accordion icon="github" title="Install our GitHub app">
-    Install the Mintlify GitHub app from your [dashboard](https://dashboard.mintlify.com/settings/organization/github-app).
-    
-    Our GitHub app automatically deploys your changes to your docs site, so you don't need to manage deployments yourself.
-</Accordion>
-<Accordion icon="palette" title="Update your site name and colors">
-    For a first change, let's update the name and colors of your docs site.
-
-    1. Open `docs.json` in your editor.
-    2. Change the `"name"` field to your project name.
-    3. Update the `"colors"` to match your brand.
-    4. Save and see your changes instantly at `http://localhost:3000`.
-
-    <Tip>Try changing the primary color to see an immediate difference!</Tip>
-  </Accordion>
-</AccordionGroup>
-
-### Step 3: Go live
-
-<Accordion icon="rocket" title="Publish your docs">
-  1. Commit and push your changes.
-  2. Your docs will update and be live in moments!
-</Accordion>
-
-## Next steps
-
-Now that you have your docs running, explore these key features:
-
-<CardGroup cols={2}>
-
-<Card title="Write Content" icon="pen-to-square" href="/essentials/markdown">
-  Learn MDX syntax and start writing your documentation.
-</Card>
-
-<Card title="Customize style" icon="palette" href="/essentials/settings">
-  Make your docs match your brand perfectly.
-</Card>
-
-<Card title="Add code examples" icon="square-code" href="/essentials/code">
-  Include syntax-highlighted code blocks.
-</Card>
-
-<Card title="API documentation" icon="code" href="/api-reference/introduction">
-  Auto-generate API docs from OpenAPI specs.
-</Card>
-
-</CardGroup>
+- **Node.js** (v14 or higher) - [Download here](https://nodejs.org/)
+- **PostgreSQL** (v12 or higher) - [Download here](https://www.postgresql.org/download/)
+- **npm**, **yarn**, or **pnpm** - Package manager (npm comes with Node.js)
+- **Git** - For cloning the repository
 
 <Note>
-  **Need help?** See our [full documentation](https://mintlify.com/docs) or join our [community](https://mintlify.com/community).
+  You can check your installations by running `node --version`, `psql --version`, and `npm --version` in your terminal.
+</Note>
+
+## Installation
+
+<Steps>
+  <Step title="Clone the repository">
+    Clone the Backend Template repository to your local machine:
+
+    <CodeGroup>
+    ```bash SSH
+    git clone git@github.com:your-username/backend-template.git
+    cd backend-template
+    ```
+
+    ```bash HTTPS
+    git clone https://github.com/your-username/backend-template.git
+    cd backend-template
+    ```
+    </CodeGroup>
+  </Step>
+
+  <Step title="Install dependencies">
+    Install all required npm packages using your preferred package manager:
+
+    <CodeGroup>
+    ```bash npm
+    npm install
+    ```
+
+    ```bash yarn
+    yarn install
+    ```
+
+    ```bash pnpm
+    pnpm install
+    ```
+    </CodeGroup>
+
+    This will install all dependencies from `package.json`, including:
+    - Express.js v5 (web framework)
+    - Sequelize v6 (ORM)
+    - PostgreSQL drivers (pg, pg-hstore)
+    - Security middleware (helmet, cors)
+    - Authentication libraries (jsonwebtoken, bcrypt)
+    - Cloudinary SDK
+    - Development tools (nodemon, jest, supertest)
+  </Step>
+
+  <Step title="Create PostgreSQL database">
+    Create a new PostgreSQL database for your project:
+
+    ```bash
+    # Connect to PostgreSQL
+    psql -U postgres
+
+    # Create a new database
+    CREATE DATABASE backend_template_db;
+
+    # Exit psql
+    \q
+    ```
+
+    <Tip>
+      Replace `backend_template_db` with your preferred database name. You can also use a GUI tool like pgAdmin or Postico to create the database.
+    </Tip>
+  </Step>
+
+  <Step title="Configure environment variables">
+    Create a `.env` file in the root directory by copying the example file:
+
+    ```bash
+    cp .env.example .env
+    ```
+
+    Open `.env` and update the `DATABASE_URL` with your PostgreSQL connection string:
+
+    ```bash .env
+    DATABASE_URL=postgres://postgres:your_password@127.0.0.1:5432/backend_template_db
+    ```
+
+    Replace the following values:
+    - `postgres` (first) - Your PostgreSQL username
+    - `your_password` - Your PostgreSQL password
+    - `backend_template_db` - Your database name
+
+    <Warning>
+      Never commit your `.env` file to version control. It's already included in `.gitignore` to prevent accidental commits.
+    </Warning>
+  </Step>
+
+  <Step title="Start the development server">
+    Launch the server in development mode with automatic reloading:
+
+    <CodeGroup>
+    ```bash npm
+    npm run dev
+    ```
+
+    ```bash yarn
+    yarn dev
+    ```
+
+    ```bash pnpm
+    pnpm dev
+    ```
+    </CodeGroup>
+
+    You should see output similar to:
+
+    ```
+    DB connected
+    👉 Server running on port 8080
+    👉 Link http://localhost:8080
+    ```
+
+    The server is now running on `http://localhost:8080` and will automatically restart when you make code changes.
+  </Step>
+
+  <Step title="Test the server">
+    Verify the server is working by making a request to the default route:
+
+    <CodeGroup>
+    ```bash curl
+    curl http://localhost:8080
+    ```
+
+    ```bash Browser
+    # Open in your browser:
+    http://localhost:8080
+    ```
+
+    ```javascript fetch
+    fetch('http://localhost:8080')
+      .then(res => res.text())
+      .then(data => console.log(data));
+    ```
+    </CodeGroup>
+
+    You should receive the response:
+
+    ```
+    Welcome to express!
+    ```
+  </Step>
+</Steps>
+
+## Create Your First API Endpoint
+
+Now let's create a simple API endpoint to see how routing works in Backend Template.
+
+<Steps>
+  <Step title="Create a users route file">
+    Create a new file `src/routes/user.routes.js`:
+
+    ```javascript src/routes/user.routes.js
+    const express = require('express');
+const router = express.Router();
+const catchError = require('../utils/catchError');
+
+// GET /api/users - Get all users
+router.get('/', catchError(async (req, res) => {
+    const users = [
+        { id: 1, name: 'John Doe', email: 'john@example.com' },
+        { id: 2, name: 'Jane Smith', email: 'jane@example.com' }
+    ];
+    return res.json(users);
+}));
+
+// GET /api/users/:id - Get user by ID
+router.get('/:id', catchError(async (req, res) => {
+    const { id } = req.params;
+    const user = { id: parseInt(id), name: 'John Doe', email: 'john@example.com' };
+    return res.json(user);
+}));
+
+// POST /api/users - Create a new user
+router.post('/', catchError(async (req, res) => {
+    const { name, email } = req.body;
+    const newUser = { id: 3, name, email };
+    return res.status(201).json(newUser);
+}));
+
+module.exports = router;
+    ```
+
+    <Note>
+      Notice how we use `catchError` to wrap async route handlers. This automatically passes any errors to our centralized error handler.
+    </Note>
+  </Step>
+
+  <Step title="Register the route">
+    Open `src/routes/index.js` and register your new users route:
+
+    ```javascript src/routes/index.js
+    const express = require('express');
+const router = express.Router();
+const userRouter = require('./user.routes');
+
+// Register the users route
+router.use('/api/users', userRouter);
+
+module.exports = router;
+    ```
+
+    Your routes are now mounted at the `/api/users` path.
+  </Step>
+
+  <Step title="Test your API endpoints">
+    The server should automatically reload (if running with `npm run dev`). Test your new endpoints:
+
+    <CodeGroup>
+    ```bash GET all users
+    curl http://localhost:8080/api/users
+    ```
+
+    ```bash GET user by ID
+    curl http://localhost:8080/api/users/1
+    ```
+
+    ```bash POST create user
+    curl -X POST http://localhost:8080/api/users \
+      -H "Content-Type: application/json" \
+      -d '{"name":"Alice Johnson","email":"alice@example.com"}'
+    ```
+    </CodeGroup>
+
+    Expected responses:
+
+    ```json GET /api/users
+    [
+      { "id": 1, "name": "John Doe", "email": "john@example.com" },
+      { "id": 2, "name": "Jane Smith", "email": "jane@example.com" }
+    ]
+    ```
+
+    ```json POST /api/users
+    {
+      "id": 3,
+      "name": "Alice Johnson",
+      "email": "alice@example.com"
+    }
+    ```
+  </Step>
+</Steps>
+
+<Tip>
+  Use tools like [Postman](https://www.postman.com/), [Insomnia](https://insomnia.rest/), or [Thunder Client](https://www.thunderclient.com/) (VS Code extension) for easier API testing with a graphical interface.
+</Tip>
+
+## Understanding the Database Connection
+
+Backend Template uses Sequelize to connect to PostgreSQL. The connection is established in `src/utils/connection.js`:
+
+```javascript src/utils/connection.js
+const { Sequelize } = require('sequelize');
+require('dotenv').config();
+
+const sequelize = new Sequelize(process.env.DATABASE_URL, { logging: false });
+
+module.exports = sequelize;
+```
+
+The server initializes the database connection in `src/server.js`:
+
+```javascript src/server.js
+const app = require('./app');
+const sequelize = require('./utils/connection');
+
+const PORT = process.env.PORT || 8080;
+
+const main = async () => {
+    try {
+        sequelize.sync(); // Syncs all models with the database
+        console.log("DB connected");
+        app.listen(PORT);
+        console.log(`👉 Server running on port ${PORT}`);
+        console.log(`👉 Link http://localhost:${PORT}`);
+    } catch (error) {
+        console.log(error)
+    }
+}
+
+main();
+```
+
+<Note>
+  `sequelize.sync()` automatically creates tables for your Sequelize models. In production, you should use migrations instead of `sync()`.
+</Note>
+
+## Running in Production Mode
+
+When you're ready to deploy, run the server in production mode:
+
+<CodeGroup>
+```bash npm
+npm start
+```
+
+```bash yarn
+yarn start
+```
+
+```bash pnpm
+pnpm start
+```
+</CodeGroup>
+
+This runs `node src/server` without nodemon, which is optimized for production environments.
+
+<Warning>
+  In production, ensure you set the `PORT` environment variable and use a process manager like [PM2](https://pm2.keymetrics.io/) to keep your server running.
+</Warning>
+
+## Next Steps
+
+Congratulations! You've successfully set up Backend Template and created your first API endpoint. Here's what to explore next:
+
+<CardGroup cols={2}>
+  <Card
+    title="Architecture"
+    icon="sitemap"
+    href="/core/architecture"
+  >
+    Learn about the project structure and architectural patterns
+  </Card>
+  <Card
+    title="Database Models"
+    icon="database"
+    href="/core/database"
+  >
+    Create Sequelize models and define relationships
+  </Card>
+  <Card
+    title="Authentication"
+    icon="shield"
+    href="/guides/authentication"
+  >
+    Implement JWT authentication with bcrypt password hashing
+  </Card>
+  <Card
+    title="Error Handling"
+    icon="triangle-exclamation"
+    href="/guides/error-handling"
+  >
+    Understand the centralized error handling system
+  </Card>
+  <Card
+    title="Routing Guide"
+    icon="route"
+    href="/guides/routing"
+  >
+    Learn how to organize and create API routes
+  </Card>
+  <Card
+    title="Architecture"
+    icon="sitemap"
+    href="/core/architecture"
+  >
+    Understand the project structure and design patterns
+  </Card>
+</CardGroup>
+
+## Common Issues
+
+<AccordionGroup>
+  <Accordion title="Database connection failed">
+    **Error:** `SequelizeConnectionError: connect ECONNREFUSED`
+
+    **Solutions:**
+    - Verify PostgreSQL is running: `psql -U postgres`
+    - Check your `DATABASE_URL` in `.env` is correct
+    - Ensure the database exists: `psql -U postgres -c "\l"`
+    - Verify your PostgreSQL credentials (username/password)
+  </Accordion>
+
+  <Accordion title="Port already in use">
+    **Error:** `Error: listen EADDRINUSE: address already in use :::8080`
+
+    **Solutions:**
+    - Change the port in `.env`: `PORT=3000`
+    - Kill the process using port 8080:
+      ```bash
+      # Find the process
+      lsof -i :8080
+      # Kill it
+      kill -9 <PID>
+      ```
+  </Accordion>
+
+  <Accordion title="Module not found errors">
+    **Error:** `Error: Cannot find module 'express'`
+
+    **Solution:**
+    - Delete `node_modules` and `package-lock.json`
+    - Reinstall dependencies: `npm install`
+  </Accordion>
+
+  <Accordion title="nodemon not found">
+    **Error:** `'nodemon' is not recognized as an internal or external command`
+
+    **Solution:**
+    - Install nodemon as a dev dependency: `npm install --save-dev nodemon`
+    - Or use `npx`: `npx nodemon src/server`
+  </Accordion>
+</AccordionGroup>
+
+<Note>
+  For additional help, refer to the guides and utility documentation sections in this documentation.
 </Note>

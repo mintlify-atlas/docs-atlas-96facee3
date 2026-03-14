@@ -1,0 +1,417 @@
+---
+title: 'Error Handling'
+description: 'Handle errors and exceptions in your Express API'
+icon: 'triangle-exclamation'
+---
+
+## Overview
+
+The Backend Template includes a centralized error handling system that catches and formats errors consistently across your API. This guide covers the error handler middleware, Sequelize error handling, and best practices.
+
+## Error Handler Middleware
+
+The error handler is defined in `src/utils/errorHandler.js` and registered as the last middleware in `src/app.js:24`:
+
+```javascript
+const errorHandler = require('./utils/errorHandler');
+
+// middlewares después de las rutas
+app.use(errorHandler)
+```
+
+<Warning>
+  The error handler must be registered **after** all routes to catch errors from route handlers.
+</Warning>
+
+## Error Handler Implementation
+
+```javascript
+const errorHandler = (error, _req, res, _next) => {
+    if(error.name === 'SequelizeValidationError') {
+        const errObj = {};
+        error.errors.map(er => {
+            errObj[er.path] = er.message;
+        })
+        return res.status(400).json(errObj);
+    }
+    if(error.name === 'SequelizeForeignKeyConstraintError'){
+        return res.status(400).json({ 
+            message: error.message,
+            error: error.parent.detail
+        });
+    }
+    if(error.name === 'SequelizeDatabaseError'){
+        return res.status(400).json({ 
+            message: error.message
+        });
+    }
+    return res.status(500).json({
+        message: error.message,
+        error: error
+    });
+}
+
+module.exports = errorHandler;
+```
+
+## Sequelize Error Types
+
+The error handler automatically handles common Sequelize errors:
+
+### SequelizeValidationError
+
+<ParamField path="SequelizeValidationError" type="400">
+  Occurs when model validation fails. Returns field-specific error messages.
+</ParamField>
+
+**Example Response:**
+```json
+{
+  "email": "Validation isEmail on email failed",
+  "age": "Validation min on age failed"
+}
+```
+
+**Trigger Example:**
+```javascript
+const User = sequelize.define('User', {
+    email: {
+        type: DataTypes.STRING,
+        allowNull: false,
+        validate: {
+            isEmail: true
+        }
+    },
+    age: {
+        type: DataTypes.INTEGER,
+        validate: {
+            min: 18
+        }
+    }
+});
+
+// This will trigger SequelizeValidationError
+await User.create({ email: 'invalid-email', age: 15 });
+```
+
+### SequelizeForeignKeyConstraintError
+
+<ParamField path="SequelizeForeignKeyConstraintError" type="400">
+  Occurs when a foreign key constraint is violated.
+</ParamField>
+
+**Example Response:**
+```json
+{
+  "message": "insert or update on table \"posts\" violates foreign key constraint",
+  "error": "Key (userId)=(999) is not present in table \"users\"."
+}
+```
+
+**Trigger Example:**
+```javascript
+// Trying to create a post with non-existent userId
+await Post.create({ title: 'My Post', userId: 999 });
+```
+
+### SequelizeDatabaseError
+
+<ParamField path="SequelizeDatabaseError" type="400">
+  Generic database errors like syntax errors or type mismatches.
+</ParamField>
+
+**Example Response:**
+```json
+{
+  "message": "invalid input syntax for type integer: \"abc\""
+}
+```
+
+### Generic Errors
+
+<ParamField path="Generic Error" type="500">
+  All other errors return a 500 status with the error message and full error object.
+</ParamField>
+
+**Example Response:**
+```json
+{
+  "message": "Unexpected error occurred",
+  "error": { /* full error object */ }
+}
+```
+
+## Using catchError Utility
+
+The `catchError` utility ensures async errors reach the error handler:
+
+```javascript
+const catchError = controller => {
+    return (req, res, next) => {
+        controller(req, res, next)
+            .catch(next);
+    }
+}
+
+module.exports = catchError
+```
+
+### How It Works
+
+<Steps>
+  <Step title="Wrap the controller">
+    `catchError` returns a new function that wraps your async controller.
+  </Step>
+
+  <Step title="Execute the controller">
+    When the route is hit, it calls your controller function with `req`, `res`, and `next`.
+  </Step>
+
+  <Step title="Catch promise rejections">
+    If the controller throws or returns a rejected promise, `.catch(next)` passes the error to Express error handling.
+  </Step>
+
+  <Step title="Error handler processes it">
+    The error is forwarded to the error handler middleware which formats the response.
+  </Step>
+</Steps>
+
+<Tip>
+  Without `catchError`, unhandled promise rejections in async routes will crash your application or be silently ignored.
+</Tip>
+
+### Usage Example
+
+<CodeGroup>
+```javascript Correct Usage
+const catchError = require('../utils/catchError');
+const User = require('../models/User');
+
+const getAll = async (req, res) => {
+    const users = await User.findAll();
+    return res.json(users);
+};
+
+// Wrap with catchError
+router.get('/users', catchError(getAll));
+```
+
+```javascript Without catchError (Don't do this)
+// BAD: Errors won't be caught
+router.get('/users', async (req, res) => {
+    const users = await User.findAll(); // If this fails, app crashes
+    return res.json(users);
+});
+```
+
+```javascript Manual try-catch (Unnecessary)
+// VERBOSE: catchError does this for you
+router.get('/users', async (req, res, next) => {
+    try {
+        const users = await User.findAll();
+        return res.json(users);
+    } catch (error) {
+        next(error);
+    }
+});
+```
+</CodeGroup>
+
+## Creating Custom Error Responses
+
+You can throw custom errors in your controllers:
+
+### HTTP Status Errors
+
+```javascript
+const getOne = async (req, res) => {
+    const { id } = req.params;
+    const user = await User.findByPk(id);
+    
+    if (!user) {
+        const error = new Error('User not found');
+        error.status = 404;
+        throw error;
+    }
+    
+    return res.json(user);
+};
+
+router.get('/users/:id', catchError(getOne));
+```
+
+### Custom Error Classes
+
+```javascript
+// src/utils/customErrors.js
+class NotFoundError extends Error {
+    constructor(message) {
+        super(message);
+        this.name = 'NotFoundError';
+        this.status = 404;
+    }
+}
+
+class UnauthorizedError extends Error {
+    constructor(message) {
+        super(message);
+        this.name = 'UnauthorizedError';
+        this.status = 401;
+    }
+}
+
+module.exports = { NotFoundError, UnauthorizedError };
+```
+
+### Enhanced Error Handler
+
+Extend the error handler to handle custom errors:
+
+```javascript
+const errorHandler = (error, _req, res, _next) => {
+    // Handle custom errors with status codes
+    if (error.status) {
+        return res.status(error.status).json({
+            message: error.message
+        });
+    }
+    
+    // Handle Sequelize errors
+    if(error.name === 'SequelizeValidationError') {
+        const errObj = {};
+        error.errors.map(er => {
+            errObj[er.path] = er.message;
+        })
+        return res.status(400).json(errObj);
+    }
+    
+    if(error.name === 'SequelizeForeignKeyConstraintError'){
+        return res.status(400).json({ 
+            message: error.message,
+            error: error.parent.detail
+        });
+    }
+    
+    if(error.name === 'SequelizeDatabaseError'){
+        return res.status(400).json({ 
+            message: error.message
+        });
+    }
+    
+    // Default 500 error
+    return res.status(500).json({
+        message: error.message,
+        error: error
+    });
+}
+```
+
+## Error Response Examples
+
+<CodeGroup>
+```json Validation Error (400)
+{
+  "email": "Validation isEmail on email failed",
+  "password": "Validation len on password failed"
+}
+```
+
+```json Foreign Key Error (400)
+{
+  "message": "insert or update violates foreign key constraint",
+  "error": "Key (categoryId)=(10) is not present in table \"categories\"."
+}
+```
+
+```json Database Error (400)
+{
+  "message": "invalid input syntax for type integer"
+}
+```
+
+```json Custom Not Found (404)
+{
+  "message": "User not found"
+}
+```
+
+```json Server Error (500)
+{
+  "message": "Cannot read property 'id' of undefined",
+  "error": { /* error stack */ }
+}
+```
+</CodeGroup>
+
+## Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Always Use catchError" icon="shield-halved">
+    Wrap all async route handlers with `catchError` to ensure errors are caught and handled properly.
+  </Card>
+
+  <Card title="Validate Early" icon="check-double">
+    Validate request data before processing to return meaningful validation errors.
+  </Card>
+
+  <Card title="Use Descriptive Messages" icon="message">
+    Provide clear, actionable error messages that help clients understand what went wrong.
+  </Card>
+
+  <Card title="Log Errors" icon="file-lines">
+    Add logging in the error handler to track errors in production (consider winston or pino).
+  </Card>
+
+  <Card title="Don't Expose Internals" icon="eye-slash">
+    In production, avoid sending full error stack traces to clients for security.
+  </Card>
+
+  <Card title="Use HTTP Status Codes" icon="hashtag">
+    Return appropriate status codes (400, 401, 404, 500) for different error types.
+  </Card>
+</CardGroup>
+
+## Production Considerations
+
+<Warning>
+  In production, avoid sending detailed error information that could expose security vulnerabilities.
+</Warning>
+
+### Environment-Based Error Responses
+
+```javascript
+const errorHandler = (error, _req, res, _next) => {
+    // ... handle specific errors ...
+    
+    // Default error response
+    const response = {
+        message: error.message
+    };
+    
+    // Only include stack trace in development
+    if (process.env.NODE_ENV === 'development') {
+        response.error = error;
+        response.stack = error.stack;
+    }
+    
+    return res.status(error.status || 500).json(response);
+}
+```
+
+### Error Logging
+
+```javascript
+const errorHandler = (error, req, res, _next) => {
+    // Log error details
+    console.error('Error:', {
+        message: error.message,
+        stack: error.stack,
+        url: req.originalUrl,
+        method: req.method,
+        ip: req.ip,
+        timestamp: new Date().toISOString()
+    });
+    
+    // ... rest of error handling ...
+}
+```

@@ -1,0 +1,482 @@
+---
+title: 'Authentication'
+description: 'Implement JWT authentication and password hashing'
+icon: 'lock'
+---
+
+## Overview
+
+The Backend Template includes `jsonwebtoken` and `bcrypt` packages for implementing secure authentication. This guide shows you how to set up JWT-based authentication with password hashing.
+
+<Note>
+  The template has `jsonwebtoken@9.0.3` and `bcrypt@6.0.0` already installed. Check `package.json` for current versions.
+</Note>
+
+## Available Packages
+
+### JWT (JSON Web Tokens)
+
+```javascript
+const jwt = require('jsonwebtoken');
+```
+
+Used for creating and verifying authentication tokens.
+
+### bcrypt
+
+```javascript
+const bcrypt = require('bcrypt');
+```
+
+Used for hashing passwords before storing them in the database.
+
+## Password Hashing with bcrypt
+
+### Hashing on User Creation
+
+<Steps>
+  <Step title="Add JWT_SECRET to environment">
+    Update `.env` and `.env.example`:
+    ```bash
+    DATABASE_URL=postgres://postgres:root@127.0.0.1:5432/<nombre_db>
+    PORT=8080
+    JWT_SECRET=your_super_secret_key_here
+    ```
+  </Step>
+
+  <Step title="Hash password in controller">
+    Hash the password before creating the user:
+    ```javascript
+    const bcrypt = require('bcrypt');
+    const User = require('../models/User');
+    
+    const create = async (req, res) => {
+        const { email, password, firstName, lastName } = req.body;
+        
+        // Hash the password
+        const hashedPassword = await bcrypt.hash(password, 10);
+        
+        const user = await User.create({
+            email,
+            password: hashedPassword,
+            firstName,
+            lastName
+        });
+        
+        return res.status(201).json(user);
+    };
+    ```
+  </Step>
+</Steps>
+
+<Tip>
+  The second parameter to `bcrypt.hash()` is the salt rounds. 10 is a good balance between security and performance.
+</Tip>
+
+### Using Sequelize Hooks (Recommended)
+
+Automate password hashing using Sequelize model hooks:
+
+```javascript
+const { DataTypes } = require('sequelize');
+const sequelize = require('../utils/connection');
+const bcrypt = require('bcrypt');
+
+const User = sequelize.define('user', {
+    email: {
+        type: DataTypes.STRING,
+        allowNull: false,
+        unique: true,
+        validate: {
+            isEmail: true
+        }
+    },
+    password: {
+        type: DataTypes.STRING,
+        allowNull: false
+    },
+    firstName: {
+        type: DataTypes.STRING,
+        allowNull: false
+    },
+    lastName: {
+        type: DataTypes.STRING,
+        allowNull: false
+    }
+}, {
+    hooks: {
+        beforeCreate: async (user) => {
+            user.password = await bcrypt.hash(user.password, 10);
+        },
+        beforeUpdate: async (user) => {
+            if (user.changed('password')) {
+                user.password = await bcrypt.hash(user.password, 10);
+            }
+        }
+    }
+});
+
+module.exports = User;
+```
+
+<CardGroup cols={2}>
+  <Card title="beforeCreate Hook" icon="plus">
+    Automatically hashes passwords when creating new users.
+  </Card>
+
+  <Card title="beforeUpdate Hook" icon="pen">
+    Only re-hashes if the password field is being changed.
+  </Card>
+</CardGroup>
+
+### Comparing Passwords
+
+Verify passwords during login:
+
+```javascript
+const isValid = await bcrypt.compare(plainPassword, hashedPassword);
+
+if (!isValid) {
+    return res.status(401).json({ message: 'Invalid credentials' });
+}
+```
+
+## JWT Implementation
+
+### Login Endpoint
+
+Create a login route that generates a JWT token:
+
+<CodeGroup>
+```javascript src/routes/auth.routes.js
+const express = require('express');
+const router = express.Router();
+const catchError = require('../utils/catchError');
+const { login } = require('../controllers/auth.controllers');
+
+router.post('/login', catchError(login));
+
+module.exports = router;
+```
+
+```javascript src/controllers/auth.controllers.js
+const jwt = require('jsonwebtoken');
+const bcrypt = require('bcrypt');
+const User = require('../models/User');
+
+const login = async (req, res) => {
+    const { email, password } = req.body;
+    
+    // Find user by email
+    const user = await User.findOne({ where: { email } });
+    if (!user) {
+        return res.status(401).json({ message: 'Invalid credentials' });
+    }
+    
+    // Compare passwords
+    const isValid = await bcrypt.compare(password, user.password);
+    if (!isValid) {
+        return res.status(401).json({ message: 'Invalid credentials' });
+    }
+    
+    // Generate JWT token
+    const token = jwt.sign(
+        { id: user.id, email: user.email },
+        process.env.JWT_SECRET,
+        { expiresIn: '7d' }
+    );
+    
+    return res.json({ 
+        user: {
+            id: user.id,
+            email: user.email,
+            firstName: user.firstName,
+            lastName: user.lastName
+        },
+        token 
+    });
+};
+
+module.exports = { login };
+```
+</CodeGroup>
+
+### Register in Main Router
+
+```javascript
+// src/routes/index.js
+const express = require('express');
+const router = express.Router();
+const authRouter = require('./auth.routes');
+const userRouter = require('./user.routes');
+
+router.use('/auth', authRouter);
+router.use('/users', userRouter);
+
+module.exports = router;
+```
+
+## Protected Routes
+
+### Creating Auth Middleware
+
+Create middleware to verify JWT tokens:
+
+```javascript
+// src/middleware/verifyJWT.js
+const jwt = require('jsonwebtoken');
+
+const verifyJWT = (req, res, next) => {
+    // Get token from Authorization header
+    const authHeader = req.headers.authorization;
+    
+    if (!authHeader) {
+        return res.status(401).json({ message: 'No token provided' });
+    }
+    
+    // Extract token (format: "Bearer TOKEN")
+    const token = authHeader.split(' ')[1];
+    
+    if (!token) {
+        return res.status(401).json({ message: 'Invalid token format' });
+    }
+    
+    try {
+        // Verify token
+        const decoded = jwt.verify(token, process.env.JWT_SECRET);
+        
+        // Attach user info to request
+        req.user = decoded;
+        
+        next();
+    } catch (error) {
+        if (error.name === 'TokenExpiredError') {
+            return res.status(401).json({ message: 'Token expired' });
+        }
+        return res.status(401).json({ message: 'Invalid token' });
+    }
+};
+
+module.exports = verifyJWT;
+```
+
+<Warning>
+  Always validate the token format and handle JWT verification errors appropriately.
+</Warning>
+
+### Using Auth Middleware
+
+Protect specific routes:
+
+```javascript
+const express = require('express');
+const router = express.Router();
+const catchError = require('../utils/catchError');
+const verifyJWT = require('../middleware/verifyJWT');
+const { getAll, getOne, update, remove } = require('../controllers/user.controllers');
+
+// Public route - no authentication required
+router.post('/', catchError(create));
+
+// Protected routes - authentication required
+router.get('/', verifyJWT, catchError(getAll));
+router.get('/:id', verifyJWT, catchError(getOne));
+router.put('/:id', verifyJWT, catchError(update));
+router.delete('/:id', verifyJWT, catchError(remove));
+
+module.exports = router;
+```
+
+### Accessing User in Controllers
+
+Access authenticated user data in your controllers:
+
+```javascript
+const getProfile = async (req, res) => {
+    // req.user is set by verifyJWT middleware
+    const userId = req.user.id;
+    
+    const user = await User.findByPk(userId);
+    return res.json(user);
+};
+
+const updateProfile = async (req, res) => {
+    const userId = req.user.id;
+    
+    const [rowsUpdated, [updatedUser]] = await User.update(
+        req.body,
+        { where: { id: userId }, returning: true }
+    );
+    
+    return res.json(updatedUser);
+};
+```
+
+## Complete Authentication Flow
+
+<Steps>
+  <Step title="User Registration">
+    Client sends email and password to `/auth/register`. Password is hashed with bcrypt and user is created.
+    ```bash
+    POST /auth/register
+    {
+      "email": "user@example.com",
+      "password": "securepass123",
+      "firstName": "John",
+      "lastName": "Doe"
+    }
+    ```
+  </Step>
+
+  <Step title="User Login">
+    Client sends credentials to `/auth/login`. Server validates password and returns JWT token.
+    ```bash
+    POST /auth/login
+    {
+      "email": "user@example.com",
+      "password": "securepass123"
+    }
+    
+    Response:
+    {
+      "user": { "id": 1, "email": "user@example.com", ... },
+      "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+    }
+    ```
+  </Step>
+
+  <Step title="Access Protected Routes">
+    Client includes token in Authorization header for protected endpoints.
+    ```bash
+    GET /users/me
+    Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+    ```
+  </Step>
+
+  <Step title="Token Verification">
+    Middleware verifies token and attaches user data to request. Controller accesses `req.user`.
+  </Step>
+</Steps>
+
+## Frontend Integration
+
+### Making Authenticated Requests
+
+```javascript
+// Store token after login
+const { token } = await fetch('/auth/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, password })
+}).then(res => res.json());
+
+localStorage.setItem('token', token);
+
+// Use token in subsequent requests
+const response = await fetch('/users/me', {
+    headers: {
+        'Authorization': `Bearer ${localStorage.getItem('token')}`
+    }
+});
+```
+
+## Security Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Strong JWT Secrets" icon="key">
+    Use a long, random string for `JWT_SECRET`. Generate with `openssl rand -base64 32`.
+  </Card>
+
+  <Card title="Appropriate Expiration" icon="clock">
+    Set reasonable token expiration times (7d for web, 30d for mobile). Implement refresh tokens for better UX.
+  </Card>
+
+  <Card title="HTTPS Only" icon="shield">
+    Always use HTTPS in production to prevent token interception.
+  </Card>
+
+  <Card title="Don't Return Passwords" icon="eye-slash">
+    Never include password fields in API responses, even if hashed.
+  </Card>
+
+  <Card title="Rate Limiting" icon="gauge-high">
+    Implement rate limiting on login endpoints to prevent brute force attacks.
+  </Card>
+
+  <Card title="Validate Input" icon="check">
+    Validate email format and password strength before processing.
+  </Card>
+</CardGroup>
+
+## Advanced Features
+
+### Refresh Tokens
+
+```javascript
+const login = async (req, res) => {
+    // ... authentication logic ...
+    
+    const accessToken = jwt.sign(
+        { id: user.id },
+        process.env.JWT_SECRET,
+        { expiresIn: '15m' }
+    );
+    
+    const refreshToken = jwt.sign(
+        { id: user.id },
+        process.env.JWT_REFRESH_SECRET,
+        { expiresIn: '7d' }
+    );
+    
+    // Store refresh token in database
+    await user.update({ refreshToken });
+    
+    return res.json({ accessToken, refreshToken });
+};
+```
+
+### Role-Based Access Control
+
+```javascript
+// Middleware to check user role
+const requireRole = (role) => {
+    return (req, res, next) => {
+        if (req.user.role !== role) {
+            return res.status(403).json({ message: 'Forbidden' });
+        }
+        next();
+    };
+};
+
+// Usage
+router.delete('/users/:id', verifyJWT, requireRole('admin'), catchError(remove));
+```
+
+### Password Reset Flow
+
+```javascript
+const requestPasswordReset = async (req, res) => {
+    const { email } = req.body;
+    const user = await User.findOne({ where: { email } });
+    
+    if (!user) {
+        // Don't reveal if user exists
+        return res.json({ message: 'If the email exists, a reset link has been sent' });
+    }
+    
+    const resetToken = jwt.sign(
+        { id: user.id },
+        process.env.JWT_SECRET,
+        { expiresIn: '1h' }
+    );
+    
+    // Send email with reset link containing token
+    // await sendResetEmail(user.email, resetToken);
+    
+    return res.json({ message: 'If the email exists, a reset link has been sent' });
+};
+```
+
+<Tip>
+  For production applications, consider using established authentication libraries like Passport.js or implementing OAuth2 with providers like Google or GitHub.
+</Tip>

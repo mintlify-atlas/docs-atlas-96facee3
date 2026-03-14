@@ -1,0 +1,220 @@
+---
+title: "Introduction"
+description: "Learn about Backend Template, a production-ready Express.js server with PostgreSQL, Sequelize ORM, JWT authentication, and security middleware"
+---
+
+## What is Backend Template?
+
+Backend Template is a fully-configured Express.js server designed to accelerate your backend development workflow. Instead of spending hours setting up authentication, database connections, security middleware, and error handling, you can start building your actual features immediately.
+
+This template provides a solid foundation with industry-standard tools and best practices built-in, allowing you to focus on your unique business logic rather than boilerplate configuration.
+
+<Note>
+  Backend Template is ideal for developers who want to quickly bootstrap a production-ready REST API without sacrificing code quality or security.
+</Note>
+
+## Who Should Use This Template?
+
+Backend Template is perfect for:
+
+- **Full-stack developers** building modern web applications with React, Vue, or Angular frontends
+- **Startup teams** who need to move fast without compromising on architecture
+- **Backend engineers** prototyping new API services or microservices
+- **Students and learners** studying Node.js backend development with real-world patterns
+- **Teams** wanting a consistent starting point across multiple projects
+
+## Key Features
+
+Backend Template comes with essential features that every modern backend needs:
+
+### Express.js v5 Framework
+
+Built on the latest Express.js v5, providing a fast, minimalist web framework for Node.js. The server is configured in `src/app.js` with production-grade middleware:
+
+```javascript
+const express = require('express');
+const helmet = require('helmet');
+const cors = require('cors');
+const router = require('./routes');
+const errorHandler = require('./utils/errorHandler');
+
+const app = express();
+
+app.use(express.json());
+app.use(helmet({ crossOriginResourcePolicy: false }));
+app.use(cors());
+app.use(router);
+app.use(errorHandler);
+```
+
+### PostgreSQL with Sequelize ORM
+
+Seamless PostgreSQL integration using Sequelize ORM for type-safe database operations. The connection is configured in `src/utils/connection.js`:
+
+```javascript
+const { Sequelize } = require('sequelize');
+const sequelize = new Sequelize(process.env.DATABASE_URL, { logging: false });
+```
+
+### Security Middleware
+
+- **Helmet** - Secures HTTP headers to prevent common web vulnerabilities
+- **CORS** - Configurable cross-origin resource sharing for API access control
+- **Environment variables** - Sensitive configuration kept out of source code using dotenv
+
+### JWT Authentication Ready
+
+JSON Web Token (jsonwebtoken v9.0.3) and bcrypt (v6.0.0) dependencies included for implementing secure user authentication and password hashing.
+
+### Cloudinary Integration
+
+Built-in Cloudinary SDK (v2.9.0) for handling image uploads, transformations, and media management.
+
+### Centralized Error Handling
+
+Sophisticated error handler in `src/utils/errorHandler.js` that catches and formats:
+
+- **Sequelize validation errors** - Returns field-specific error messages
+- **Foreign key constraint errors** - Provides detailed constraint violation information
+- **Database errors** - Handles SQL errors gracefully
+- **Generic errors** - Catches unexpected errors with full context
+
+```javascript
+const errorHandler = (error, _req, res, _next) => {
+    if(error.name === 'SequelizeValidationError') {
+        const errObj = {};
+        error.errors.map(er => {
+            errObj[er.path] = er.message;
+        });
+        return res.status(400).json(errObj);
+    }
+    // ... handles other error types
+};
+```
+
+### Async Error Catching
+
+Utility wrapper `catchError` in `src/utils/catchError.js` for clean async/await error handling in route controllers:
+
+```javascript
+const catchError = controller => {
+    return (req, res, next) => {
+        controller(req, res, next).catch(next);
+    }
+}
+```
+
+### Development & Production Scripts
+
+- **Development mode** - `npm run dev` with nodemon for automatic restart on file changes
+- **Production mode** - `npm start` for optimized server execution
+- **Testing ready** - Jest and Supertest configured for API testing
+
+## Technology Stack
+
+Backend Template leverages a modern, battle-tested technology stack:
+
+<CardGroup cols={2}>
+  <Card title="Runtime" icon="node">
+    **Node.js** - JavaScript runtime for server-side execution
+  </Card>
+  <Card title="Framework" icon="bolt">
+    **Express.js v5** - Fast, unopinionated web framework
+  </Card>
+  <Card title="Database" icon="database">
+    **PostgreSQL** - Powerful, open-source relational database
+  </Card>
+  <Card title="ORM" icon="layer-group">
+    **Sequelize v6** - Promise-based Node.js ORM
+  </Card>
+  <Card title="Authentication" icon="key">
+    **JWT + bcrypt** - Secure token-based authentication
+  </Card>
+  <Card title="Security" icon="shield">
+    **Helmet + CORS** - Production-grade security headers
+  </Card>
+  <Card title="Media" icon="cloud">
+    **Cloudinary** - Cloud-based image and video management
+  </Card>
+  <Card title="Testing" icon="flask">
+    **Jest + Supertest** - Comprehensive testing framework
+  </Card>
+</CardGroup>
+
+## Architecture Overview
+
+The template follows a clean, modular architecture:
+
+```
+src/
+├── app.js              # Express app configuration & middleware
+├── server.js           # Server entry point & database sync
+├── routes/
+│   └── index.js        # Route registration
+└── utils/
+    ├── connection.js   # Database connection
+    ├── errorHandler.js # Centralized error handling
+    └── catchError.js   # Async error wrapper
+```
+
+<Tip>
+  This structure promotes separation of concerns, making it easy to scale your application as it grows.
+</Tip>
+
+## When to Use This Template
+
+### Use Backend Template when you need:
+
+- A REST API for a web or mobile application
+- User authentication and authorization
+- Relational data with complex queries and associations
+- File upload and media management capabilities
+- Production-ready security out of the box
+- A proven structure that scales with your team
+
+### Consider alternatives when:
+
+- You need GraphQL instead of REST (consider adding Apollo Server)
+- You're building a serverless application (consider AWS Lambda or Vercel functions)
+- You need real-time features (consider adding Socket.io or switching to a framework like Nest.js)
+- You prefer a different database (the template can be adapted for MongoDB, MySQL, etc.)
+
+## Template vs. Building From Scratch
+
+<CardGroup cols={2}>
+  <Card title="Backend Template" icon="rocket">
+    **Start building in minutes**
+    - All dependencies pre-configured
+    - Security middleware included
+    - Error handling patterns established
+    - Database connection ready
+    - Testing setup complete
+    - Production deployment ready
+  </Card>
+  <Card title="Building From Scratch" icon="hammer">
+    **More flexibility, more time**
+    - Choose every dependency yourself
+    - Configure security from scratch
+    - Implement error handling patterns
+    - Set up database connection
+    - Configure testing framework
+    - Debug production issues
+  </Card>
+</CardGroup>
+
+<Warning>
+  Building from scratch can take 1-2 days for basic setup alone. Backend Template gets you production-ready in under 10 minutes.
+</Warning>
+
+## What's Next?
+
+Ready to start building? Follow the quickstart guide to get your server running and create your first API endpoint.
+
+<Card
+  title="Quickstart Guide"
+  icon="rocket"
+  href="/quickstart"
+  horizontal
+>
+  Set up Backend Template and build your first endpoint in under 10 minutes
+</Card>

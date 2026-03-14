@@ -1,0 +1,423 @@
+---
+title: 'API Overview'
+description: 'Comprehensive API reference and structure guide for the Express backend template'
+---
+
+## Introduction
+
+This backend template provides a solid foundation for building RESTful APIs with Express.js, PostgreSQL, and Sequelize ORM. It includes built-in error handling, security middleware, and a clean project structure ready for extension.
+
+## Base Endpoint
+
+<ParamField path="GET /" type="endpoint">
+  Welcome endpoint that confirms the server is running.
+</ParamField>
+
+### Example Request
+
+```bash
+curl http://localhost:8080/
+```
+
+### Example Response
+
+```json
+"Welcome to express!"
+```
+
+<Note>
+  This is the default root endpoint defined in `src/app.js:19`. You can customize this message or replace it with your own API documentation endpoint.
+</Note>
+
+## API Structure
+
+The template uses a modular routing structure that makes it easy to organize and scale your API endpoints.
+
+### Adding New Endpoints
+
+To add new API endpoints, follow this pattern:
+
+1. **Create a route file** in `src/routes/`:
+
+```javascript
+// src/routes/user.routes.js
+const express = require('express');
+const router = express.Router();
+const catchError = require('../utils/catchError');
+
+// Your controller functions
+const getAll = catchError(async (req, res) => {
+    const users = await User.findAll();
+    return res.json(users);
+});
+
+router.get('/', getAll);
+
+module.exports = router;
+```
+
+2. **Register the route** in `src/routes/index.js`:
+
+```javascript
+const express = require('express');
+const router = express.Router();
+const userRouter = require('./user.routes');
+
+router.use('/users', userRouter);
+
+module.exports = router;
+```
+
+<Note>
+  All routes registered in `src/routes/index.js` are automatically prefixed with the base URL. For example, `/users` becomes `http://localhost:8080/users`.
+</Note>
+
+## Response Formats
+
+### Success Response
+
+Success responses typically return JSON data with appropriate HTTP status codes:
+
+```json
+{
+  "id": 1,
+  "name": "John Doe",
+  "email": "john@example.com"
+}
+```
+
+**Common Success Status Codes:**
+
+<CardGroup cols={2}>
+  <Card title="200 OK" icon="check">
+    Successful GET, PUT, or PATCH request
+  </Card>
+  <Card title="201 Created" icon="plus">
+    Successful POST request creating a new resource
+  </Card>
+  <Card title="204 No Content" icon="circle">
+    Successful DELETE request
+  </Card>
+</CardGroup>
+
+### Error Response Structure
+
+The template includes a centralized error handler (`src/utils/errorHandler.js:1`) that processes errors and returns consistent error responses.
+
+#### Validation Error (400)
+
+When Sequelize validation fails:
+
+```json
+{
+  "fieldName": "Validation error message",
+  "email": "Email must be unique",
+  "password": "Password cannot be null"
+}
+```
+
+<ResponseField name="fieldName" type="string">
+  Error message for each field that failed validation
+</ResponseField>
+
+#### Foreign Key Constraint Error (400)
+
+When a foreign key constraint is violated:
+
+```json
+{
+  "message": "insert or update on table violates foreign key constraint",
+  "error": "Key (user_id)=(999) is not present in table \"users\""
+}
+```
+
+<ResponseField name="message" type="string">
+  High-level error message
+</ResponseField>
+
+<ResponseField name="error" type="string">
+  Detailed database error information
+</ResponseField>
+
+#### Database Error (400)
+
+For general database errors:
+
+```json
+{
+  "message": "Database error message"
+}
+```
+
+#### Server Error (500)
+
+For unexpected server errors:
+
+```json
+{
+  "message": "Error message",
+  "error": {
+    "name": "Error",
+    "stack": "..."
+  }
+}
+```
+
+<Note>
+  The error handler automatically catches and formats errors from Sequelize operations. Use the `catchError` utility to wrap async route handlers.
+</Note>
+
+## Available Utilities
+
+The template provides several utilities to streamline development:
+
+### catchError
+
+**Location:** `src/utils/catchError.js:1`
+
+Wraps async route handlers to automatically catch errors and pass them to the error handler.
+
+**Usage:**
+
+```javascript
+const catchError = require('../utils/catchError');
+
+const getUsers = catchError(async (req, res) => {
+    const users = await User.findAll();
+    return res.json(users);
+});
+
+router.get('/users', getUsers);
+```
+
+<ParamField path="controller" type="function" required>
+  Async function that handles the route logic
+</ParamField>
+
+**Returns:** Express middleware function with automatic error handling
+
+### errorHandler
+
+**Location:** `src/utils/errorHandler.js:1`
+
+Centralized error handling middleware that processes errors and returns appropriate responses.
+
+**Handles:**
+- Sequelize validation errors
+- Foreign key constraint violations
+- Database errors
+- Generic server errors
+
+**Usage:**
+
+```javascript
+// Already configured in src/app.js:24
+app.use(errorHandler);
+```
+
+<Note>
+  The error handler must be registered **after** all routes to catch errors properly.
+</Note>
+
+### Database Connection
+
+**Location:** `src/utils/connection.js:1`
+
+Sequelize instance configured with your PostgreSQL database.
+
+**Usage:**
+
+```javascript
+const sequelize = require('./utils/connection');
+
+// Sync models
+await sequelize.sync();
+
+// Test connection
+await sequelize.authenticate();
+```
+
+<ParamField path="DATABASE_URL" type="string" required>
+  PostgreSQL connection string from environment variables
+</ParamField>
+
+## Security Middleware
+
+The template includes security middleware configured in `src/app.js`:
+
+<CardGroup cols={2}>
+  <Card title="Helmet" icon="shield">
+    Sets various HTTP headers for security
+  </Card>
+  <Card title="CORS" icon="globe">
+    Enables Cross-Origin Resource Sharing
+  </Card>
+  <Card title="JSON Parser" icon="brackets-curly">
+    Parses incoming JSON request bodies
+  </Card>
+</CardGroup>
+
+**Configuration:**
+
+```javascript
+// src/app.js:12-16
+app.use(express.json());
+app.use(helmet({
+    crossOriginResourcePolicy: false,
+}));
+app.use(cors());
+```
+
+## Building Your API
+
+### Step-by-Step Guide
+
+1. **Define Your Models**
+
+Create Sequelize models in a `models` directory:
+
+```javascript
+// src/models/User.js
+const { DataTypes } = require('sequelize');
+const sequelize = require('../utils/connection');
+
+const User = sequelize.define('user', {
+    name: {
+        type: DataTypes.STRING,
+        allowNull: false
+    },
+    email: {
+        type: DataTypes.STRING,
+        allowNull: false,
+        unique: true,
+        validate: {
+            isEmail: true
+        }
+    }
+});
+
+module.exports = User;
+```
+
+2. **Create Controllers**
+
+Organize your business logic in controller functions:
+
+```javascript
+// src/controllers/user.controller.js
+const catchError = require('../utils/catchError');
+const User = require('../models/User');
+
+const getAll = catchError(async (req, res) => {
+    const users = await User.findAll();
+    return res.json(users);
+});
+
+const create = catchError(async (req, res) => {
+    const user = await User.create(req.body);
+    return res.status(201).json(user);
+});
+
+module.exports = { getAll, create };
+```
+
+3. **Set Up Routes**
+
+Connect controllers to endpoints:
+
+```javascript
+// src/routes/user.routes.js
+const express = require('express');
+const { getAll, create } = require('../controllers/user.controller');
+const router = express.Router();
+
+router.route('/')
+    .get(getAll)
+    .post(create);
+
+module.exports = router;
+```
+
+4. **Register Routes**
+
+Add routes to the main router:
+
+```javascript
+// src/routes/index.js
+const userRouter = require('./user.routes');
+
+router.use('/users', userRouter);
+```
+
+## Testing Your API
+
+You can test your endpoints using cURL, Postman, or any HTTP client:
+
+<CodeGroup>
+
+```bash cURL
+# Test welcome endpoint
+curl http://localhost:8080/
+
+# GET request
+curl http://localhost:8080/users
+
+# POST request
+curl -X POST http://localhost:8080/users \
+  -H "Content-Type: application/json" \
+  -d '{"name":"John Doe","email":"john@example.com"}'
+```
+
+```javascript JavaScript Fetch
+// Test welcome endpoint
+fetch('http://localhost:8080/')
+  .then(res => res.text())
+  .then(console.log);
+
+// GET request
+fetch('http://localhost:8080/users')
+  .then(res => res.json())
+  .then(console.log);
+
+// POST request
+fetch('http://localhost:8080/users', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    name: 'John Doe',
+    email: 'john@example.com'
+  })
+})
+  .then(res => res.json())
+  .then(console.log);
+```
+
+</CodeGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Error Handling" icon="triangle-exclamation" href="/utilities/error-handler">
+    Learn about the centralized error handling system
+  </Card>
+  <Card title="Database Setup" icon="database" href="/utilities/database-connection">
+    Configure PostgreSQL and Sequelize models
+  </Card>
+  <Card title="Async Utilities" icon="arrows-spin" href="/utilities/catch-error">
+    Use catchError for clean async route handlers
+  </Card>
+  <Card title="Getting Started" icon="rocket" href="/quickstart">
+    Set up your development environment
+  </Card>
+</CardGroup>
+
+## Port Configuration
+
+The server runs on port **8080** by default, or uses the `PORT` environment variable:
+
+```javascript
+// src/server.js:4
+const PORT = process.env.PORT || 8080;
+```
+
+Access your API at `http://localhost:8080` when running locally.

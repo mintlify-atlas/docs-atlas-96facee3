@@ -1,0 +1,340 @@
+---
+title: 'Database Connection'
+description: 'Sequelize configuration and database connection setup'
+---
+
+## Overview
+
+The database connection utility creates and exports a configured Sequelize instance that connects to your PostgreSQL database. This instance is used throughout the application for defining models and executing database queries.
+
+## Implementation
+
+```javascript src/utils/connection.js
+const { Sequelize } = require('sequelize');
+require('dotenv').config();
+
+const sequelize = new Sequelize(process.env.DATABASE_URL, { logging: false })
+
+module.exports = sequelize;
+```
+
+## Configuration
+
+### Database URL
+
+The connection uses the `DATABASE_URL` environment variable, which should be a PostgreSQL connection string:
+
+```bash .env
+DATABASE_URL=postgres://username:password@localhost:5432/database_name
+```
+
+<ParamField path="DATABASE_URL" type="string" required>
+  PostgreSQL connection string in the format: `postgres://username:password@host:port/database`
+</ParamField>
+
+**URL Format Components:**
+- `username` - PostgreSQL user
+- `password` - User password
+- `host` - Database server hostname (e.g., `localhost`, `db.example.com`)
+- `port` - PostgreSQL port (default: `5432`)
+- `database` - Database name
+
+### Options
+
+<ParamField path="logging" type="boolean" default="false">
+  Controls SQL query logging to the console. Set to `true` for debugging or `false` in production.
+</ParamField>
+
+<Tip>
+  Enable logging during development to see the SQL queries Sequelize generates:
+  
+  ```javascript
+  const sequelize = new Sequelize(process.env.DATABASE_URL, { 
+    logging: console.log 
+  })
+  ```
+</Tip>
+
+## Usage
+
+### Defining Models
+
+Import the Sequelize instance to define your database models:
+
+```javascript src/models/User.js
+const { DataTypes } = require('sequelize');
+const sequelize = require('../utils/connection');
+
+const User = sequelize.define('User', {
+    id: {
+        type: DataTypes.INTEGER,
+        primaryKey: true,
+        autoIncrement: true
+    },
+    username: {
+        type: DataTypes.STRING,
+        allowNull: false,
+        unique: true,
+        validate: {
+            notEmpty: true
+        }
+    },
+    email: {
+        type: DataTypes.STRING,
+        allowNull: false,
+        unique: true,
+        validate: {
+            isEmail: true
+        }
+    },
+    password: {
+        type: DataTypes.STRING,
+        allowNull: false
+    }
+}, {
+    timestamps: true,
+    tableName: 'users'
+});
+
+module.exports = User;
+```
+
+### Model Associations
+
+Define relationships between models:
+
+```javascript src/models/Post.js
+const { DataTypes } = require('sequelize');
+const sequelize = require('../utils/connection');
+const User = require('./User');
+
+const Post = sequelize.define('Post', {
+    id: {
+        type: DataTypes.INTEGER,
+        primaryKey: true,
+        autoIncrement: true
+    },
+    title: {
+        type: DataTypes.STRING,
+        allowNull: false
+    },
+    content: {
+        type: DataTypes.TEXT,
+        allowNull: false
+    },
+    userId: {
+        type: DataTypes.INTEGER,
+        allowNull: false,
+        references: {
+            model: User,
+            key: 'id'
+        }
+    }
+});
+
+// Define associations
+User.hasMany(Post, { foreignKey: 'userId' });
+Post.belongsTo(User, { foreignKey: 'userId' });
+
+module.exports = Post;
+```
+
+### Database Synchronization
+
+Sync your models with the database (creates tables if they don't exist):
+
+```javascript src/server.js
+const app = require('./app');
+const sequelize = require('./utils/connection');
+
+const PORT = process.env.PORT || 3000;
+
+sequelize.sync({ force: false })
+    .then(() => {
+        console.log('Database connected successfully');
+        app.listen(PORT, () => {
+            console.log(`Server running on port ${PORT}`);
+        });
+    })
+    .catch(err => {
+        console.error('Unable to connect to database:', err);
+    });
+```
+
+<Warning>
+  **Never use `{ force: true }` in production!** This will drop all tables and recreate them, deleting all data. Use migrations instead for production database changes.
+</Warning>
+
+### Testing Connection
+
+Verify the database connection:
+
+```javascript
+const sequelize = require('./utils/connection');
+
+sequelize.authenticate()
+    .then(() => {
+        console.log('Connection has been established successfully.');
+    })
+    .catch(err => {
+        console.error('Unable to connect to the database:', err);
+    });
+```
+
+## Advanced Configuration
+
+### Connection Pooling
+
+For production applications, configure connection pooling:
+
+```javascript
+const sequelize = new Sequelize(process.env.DATABASE_URL, {
+    logging: false,
+    pool: {
+        max: 5,
+        min: 0,
+        acquire: 30000,
+        idle: 10000
+    }
+});
+```
+
+<ParamField path="pool.max" type="number" default="5">
+  Maximum number of connection in pool
+</ParamField>
+
+<ParamField path="pool.min" type="number" default="0">
+  Minimum number of connection in pool
+</ParamField>
+
+<ParamField path="pool.acquire" type="number" default="30000">
+  Maximum time (ms) that pool will try to get connection before throwing error
+</ParamField>
+
+<ParamField path="pool.idle" type="number" default="10000">
+  Maximum time (ms) that a connection can be idle before being released
+</ParamField>
+
+### Dialect-Specific Options
+
+```javascript
+const sequelize = new Sequelize(process.env.DATABASE_URL, {
+    logging: false,
+    dialect: 'postgres',
+    dialectOptions: {
+        ssl: {
+            require: true,
+            rejectUnauthorized: false
+        }
+    }
+});
+```
+
+<Note>
+  SSL configuration is often required for cloud-hosted databases like Heroku Postgres, AWS RDS, or DigitalOcean Managed Databases.
+</Note>
+
+### Environment-Based Configuration
+
+```javascript
+const sequelize = new Sequelize(process.env.DATABASE_URL, {
+    logging: process.env.NODE_ENV === 'development' ? console.log : false,
+    dialect: 'postgres',
+    dialectOptions: {
+        ssl: process.env.NODE_ENV === 'production' ? {
+            require: true,
+            rejectUnauthorized: false
+        } : false
+    }
+});
+```
+
+## Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Use Environment Variables" icon="key">
+    Never hardcode database credentials. Always use environment variables with a `.env` file.
+  </Card>
+  
+  <Card title="Disable Logging in Production" icon="volume-xmark">
+    SQL logging can impact performance and expose sensitive data. Keep `logging: false` in production.
+  </Card>
+  
+  <Card title="Use Migrations" icon="database">
+    For production, use Sequelize migrations instead of `sync()` to manage database schema changes safely.
+  </Card>
+  
+  <Card title="Connection Pooling" icon="layer-group">
+    Configure connection pooling for better performance under load.
+  </Card>
+</CardGroup>
+
+## Database Migrations
+
+For production applications, use Sequelize migrations:
+
+```bash
+# Install Sequelize CLI
+npm install --save-dev sequelize-cli
+
+# Initialize migrations
+npx sequelize-cli init
+
+# Create a migration
+npx sequelize-cli migration:generate --name create-users
+
+# Run migrations
+npx sequelize-cli db:migrate
+
+# Undo last migration
+npx sequelize-cli db:migrate:undo
+```
+
+<Tip>
+  Migrations provide version control for your database schema and allow you to roll back changes if needed. They're essential for team collaboration and production deployments.
+</Tip>
+
+## Troubleshooting
+
+### Connection Refused
+
+```
+Error: connect ECONNREFUSED 127.0.0.1:5432
+```
+
+**Solutions:**
+- Ensure PostgreSQL is running: `sudo service postgresql status`
+- Check that the port is correct (default: 5432)
+- Verify the host in your `DATABASE_URL`
+
+### Authentication Failed
+
+```
+Error: password authentication failed for user "username"
+```
+
+**Solutions:**
+- Verify username and password in `DATABASE_URL`
+- Check PostgreSQL user permissions
+- Ensure the database exists
+
+### SSL/TLS Errors
+
+```
+Error: self signed certificate
+```
+
+**Solution:**
+```javascript
+dialectOptions: {
+    ssl: {
+        require: true,
+        rejectUnauthorized: false
+    }
+}
+```
+
+## Related
+
+- [Error Handler](/utilities/error-handler) - Handles Sequelize errors
+- [CatchError Utility](/utilities/catch-error) - Wraps async database operations

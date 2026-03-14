@@ -1,0 +1,169 @@
+---
+title: 'Environment Setup'
+description: 'Configure environment variables and database connections'
+icon: 'gear'
+---
+
+## Overview
+
+The Backend Template uses environment variables for configuration management. This guide covers how to set up your `.env` file and manage configuration securely.
+
+<Note>
+  Environment variables are loaded using the `dotenv` package, which is already configured in `src/app.js:6`.
+</Note>
+
+## Initial Setup
+
+<Steps>
+  <Step title="Copy the example file">
+    Create your `.env` file from the example:
+    ```bash
+    cp .env.example .env
+    ```
+  </Step>
+
+  <Step title="Configure database connection">
+    Update the `DATABASE_URL` with your PostgreSQL credentials:
+    ```bash
+    DATABASE_URL=postgres://postgres:root@127.0.0.1:5432/<nombre_db>
+    ```
+  </Step>
+
+  <Step title="Set the server port (optional)">
+    The server defaults to port 8080 if not specified. To use a different port:
+    ```bash
+    PORT=3000
+    ```
+  </Step>
+</Steps>
+
+## Environment Variables Reference
+
+### DATABASE_URL
+
+<ParamField path="DATABASE_URL" type="string" required>
+  PostgreSQL connection string used by Sequelize ORM.
+</ParamField>
+
+**Format:**
+```
+postgres://[username]:[password]@[host]:[port]/[database_name]
+```
+
+**Example:**
+```bash
+DATABASE_URL=postgres://postgres:mypassword@127.0.0.1:5432/myapp_db
+```
+
+<Warning>
+  Never commit your `.env` file to version control. The `.gitignore` file should already exclude it.
+</Warning>
+
+### PORT
+
+<ParamField path="PORT" type="number" default="8080">
+  The port number on which the Express server will listen.
+</ParamField>
+
+**Example:**
+```bash
+PORT=8080
+```
+
+The PORT is used in `src/server.js:4`:
+```javascript
+const PORT = process.env.PORT || 8080;
+```
+
+## Adding New Environment Variables
+
+<Steps>
+  <Step title="Add to .env.example">
+    Document the new variable in `.env.example` with a placeholder value:
+    ```bash
+    DATABASE_URL=postgres://postgres:root@127.0.0.1:5432/<nombre_db>
+    PORT=8080
+    JWT_SECRET=your_jwt_secret_here
+    ```
+  </Step>
+
+  <Step title="Add to your local .env">
+    Add the actual value to your local `.env` file:
+    ```bash
+    JWT_SECRET=super_secret_key_12345
+    ```
+  </Step>
+
+  <Step title="Access in your code">
+    Use `process.env.VARIABLE_NAME` to access the value:
+    ```javascript
+    const jwtSecret = process.env.JWT_SECRET;
+    ```
+  </Step>
+</Steps>
+
+## Database Connection
+
+The database connection is configured in `src/utils/connection.js`:
+
+```javascript
+const { Sequelize } = require('sequelize');
+require('dotenv').config();
+
+const sequelize = new Sequelize(process.env.DATABASE_URL, { logging: false })
+
+module.exports = sequelize;
+```
+
+<Tip>
+  Set `logging: true` in the Sequelize configuration during development to see SQL queries in the console.
+</Tip>
+
+## Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Use Strong Secrets" icon="lock">
+    Generate cryptographically secure secrets for JWT and other sensitive values. Never use simple passwords.
+  </Card>
+
+  <Card title="Different Environments" icon="layer-group">
+    Maintain separate `.env` files for development, staging, and production environments.
+  </Card>
+
+  <Card title="Document Variables" icon="book">
+    Always update `.env.example` when adding new environment variables so team members know what's required.
+  </Card>
+
+  <Card title="Never Commit Secrets" icon="ban">
+    Double-check that `.env` is in `.gitignore` and never commit actual secrets to version control.
+  </Card>
+</CardGroup>
+
+## Secrets Management
+
+<Warning>
+  For production deployments, use secure secret management services instead of plain `.env` files.
+</Warning>
+
+### Recommended Approaches
+
+- **Cloud Platforms**: Use platform-specific secret managers (AWS Secrets Manager, Google Secret Manager, Azure Key Vault)
+- **CI/CD**: Store secrets in your CI/CD platform's secure environment variables
+- **Local Development**: Use `.env` files (never committed)
+- **Team Sharing**: Use password managers or secret sharing tools for team collaboration
+
+## Verifying Configuration
+
+When you start the server, you should see:
+
+```bash
+DB connected
+👉 Server running on port 8080
+👉 Link http://localhost:8080
+```
+
+If the database connection fails, verify:
+- PostgreSQL is running
+- Database credentials are correct
+- Database name exists
+- Network connectivity to database host

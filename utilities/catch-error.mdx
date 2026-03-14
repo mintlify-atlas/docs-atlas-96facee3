@@ -1,0 +1,257 @@
+---
+title: 'Catch Error'
+description: 'Utility function to wrap async route handlers and propagate errors to Express error middleware'
+---
+
+## Overview
+
+The `catchError` utility is a higher-order function that wraps async route handlers and automatically catches any errors they throw, passing them to Express error-handling middleware. This eliminates the need for try-catch blocks in every async route.
+
+## Why It's Needed
+
+Express does not automatically catch errors thrown in async functions. Without proper error handling, unhandled promise rejections can cause your application to crash or hang.
+
+<Note>
+  In Express 4.x, async errors must be explicitly passed to `next()`. Express 5.x will handle this automatically, but until then, utilities like `catchError` are essential.
+</Note>
+
+### Without catchError
+
+```javascript
+// ❌ Errors are not caught - will crash the app
+router.get('/users', async (req, res) => {
+    const users = await User.findAll(); // If this throws, app crashes
+    res.json(users);
+});
+
+// ✅ Manual try-catch (verbose and repetitive)
+router.get('/users', async (req, res, next) => {
+    try {
+        const users = await User.findAll();
+        res.json(users);
+    } catch (error) {
+        next(error);
+    }
+});
+```
+
+### With catchError
+
+```javascript
+// ✅ Clean and automatic error handling
+router.get('/users', catchError(async (req, res) => {
+    const users = await User.findAll();
+    res.json(users);
+}));
+```
+
+## Function Signature
+
+```javascript
+catchError(controller)
+```
+
+<ParamField path="controller" type="Function" required>
+  An async Express route handler function with signature `(req, res, next) => Promise`
+</ParamField>
+
+<ResponseField name="returns" type="Function">
+  A wrapped route handler that catches errors and passes them to `next()`
+</ResponseField>
+
+## Implementation
+
+```javascript src/utils/catchError.js
+const catchError = controller => {
+    return (req, res, next) => {
+        controller(req, res, next)
+            .catch(next);
+    }
+}
+
+module.exports = catchError
+```
+
+## How It Works
+
+1. **Wraps the async controller**: Returns a new function that Express can use as middleware
+2. **Executes the controller**: Calls your async route handler with `req`, `res`, and `next`
+3. **Catches errors**: If the promise rejects, `.catch(next)` passes the error to Express error middleware
+4. **Propagates to error handler**: The error flows to your [errorHandler middleware](/utilities/error-handler)
+
+## Usage Examples
+
+### Basic GET Route
+
+```javascript
+const express = require('express');
+const catchError = require('./utils/catchError');
+const User = require('./models/User');
+
+const router = express.Router();
+
+router.get('/users', catchError(async (req, res) => {
+    const users = await User.findAll();
+    res.json(users);
+}));
+```
+
+### POST Route with Validation
+
+```javascript
+router.post('/users', catchError(async (req, res) => {
+    const user = await User.create(req.body);
+    res.status(201).json(user);
+}));
+```
+
+If validation fails, Sequelize throws a `SequelizeValidationError`, which is caught and passed to the error handler.
+
+### Route with Parameters
+
+```javascript
+router.get('/users/:id', catchError(async (req, res) => {
+    const user = await User.findByPk(req.params.id);
+    
+    if (!user) {
+        throw new Error('User not found');
+    }
+    
+    res.json(user);
+}));
+```
+
+### PUT/PATCH Route
+
+```javascript
+router.put('/users/:id', catchError(async (req, res) => {
+    const user = await User.findByPk(req.params.id);
+    
+    if (!user) {
+        throw new Error('User not found');
+    }
+    
+    await user.update(req.body);
+    res.json(user);
+}));
+```
+
+### DELETE Route
+
+```javascript
+router.delete('/users/:id', catchError(async (req, res) => {
+    const user = await User.findByPk(req.params.id);
+    
+    if (!user) {
+        throw new Error('User not found');
+    }
+    
+    await user.destroy();
+    res.status(204).send();
+}));
+```
+
+### Complex Route with Multiple Async Operations
+
+```javascript
+router.post('/users/:id/posts', catchError(async (req, res) => {
+    const user = await User.findByPk(req.params.id);
+    
+    if (!user) {
+        throw new Error('User not found');
+    }
+    
+    const post = await Post.create({
+        ...req.body,
+        userId: user.id
+    });
+    
+    res.status(201).json(post);
+}));
+```
+
+## Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Use with All Async Routes" icon="route">
+    Wrap every async route handler with `catchError` to ensure consistent error handling throughout your application.
+  </Card>
+  
+  <Card title="Throw Meaningful Errors" icon="exclamation-triangle">
+    Throw descriptive errors that can be properly handled by your error middleware. Consider creating custom error classes.
+  </Card>
+  
+  <Card title="Pair with Error Handler" icon="link">
+    Always use `catchError` together with the [errorHandler middleware](/utilities/error-handler) for complete error handling.
+  </Card>
+  
+  <Card title="Keep Routes Clean" icon="sparkles">
+    Let `catchError` handle error propagation so your route handlers can focus on business logic.
+  </Card>
+</CardGroup>
+
+## Common Patterns
+
+### Custom Error Classes
+
+```javascript
+class NotFoundError extends Error {
+    constructor(message) {
+        super(message);
+        this.name = 'NotFoundError';
+        this.statusCode = 404;
+    }
+}
+
+router.get('/users/:id', catchError(async (req, res) => {
+    const user = await User.findByPk(req.params.id);
+    
+    if (!user) {
+        throw new NotFoundError('User not found');
+    }
+    
+    res.json(user);
+}));
+```
+
+Then update your error handler to recognize custom error classes:
+
+```javascript
+if (error.statusCode) {
+    return res.status(error.statusCode).json({
+        message: error.message
+    });
+}
+```
+
+### Validation Before Database Operations
+
+```javascript
+router.post('/users', catchError(async (req, res) => {
+    const { email, username, password } = req.body;
+    
+    if (!email || !username || !password) {
+        throw new Error('Email, username, and password are required');
+    }
+    
+    const user = await User.create({ email, username, password });
+    res.status(201).json(user);
+}));
+```
+
+<Tip>
+  For more sophisticated validation, consider using libraries like `joi`, `express-validator`, or `zod` before your route handlers.
+</Tip>
+
+## Alternatives
+
+If you're using **Express 5.x** or higher, async errors are automatically caught. However, for Express 4.x (which this template uses), `catchError` is essential.
+
+Other alternatives include:
+- **express-async-handler** - Popular npm package with similar functionality
+- **express-async-errors** - Patches Express to handle async errors automatically
+
+## Related
+
+- [Error Handler](/utilities/error-handler) - Centralized error handling middleware
+- [Database Connection](/utilities/database-connection) - Sequelize setup for database operations

@@ -1,0 +1,418 @@
+---
+title: 'Database & Sequelize'
+description: 'PostgreSQL integration with Sequelize ORM'
+icon: 'database'
+---
+
+## Overview
+
+The Backend Template uses **Sequelize**, a powerful ORM (Object-Relational Mapping) library, to interact with PostgreSQL databases. This provides a clean, promise-based API for database operations.
+
+<CardGroup cols={2}>
+  <Card title="Sequelize ORM" icon="layer-group">
+    Modern promise-based ORM for Node.js
+  </Card>
+  <Card title="PostgreSQL" icon="elephant">
+    Robust, enterprise-grade relational database
+  </Card>
+</CardGroup>
+
+## Database Connection
+
+The database connection is established in `src/utils/connection.js` using the `DATABASE_URL` environment variable:
+
+```javascript src/utils/connection.js
+const { Sequelize } = require('sequelize');
+require('dotenv').config();
+
+const sequelize = new Sequelize(process.env.DATABASE_URL, { logging: false })
+
+module.exports = sequelize;
+```
+
+<Note>
+The `logging: false` option disables SQL query logging in the console. Set it to `true` during development if you want to see the generated SQL queries.
+</Note>
+
+### Connection Configuration
+
+The `DATABASE_URL` should be set in your `.env` file with the following format:
+
+```bash .env
+DATABASE_URL=postgres://username:password@localhost:5432/database_name
+```
+
+<Warning>
+Never commit your `.env` file to version control. Always add `.env` to your `.gitignore` file.
+</Warning>
+
+<Accordion title="DATABASE_URL Format Breakdown">
+  
+```
+postgres://username:password@host:port/database_name
+```
+
+- **postgres://** - Protocol (use `postgresql://` for some providers)
+- **username** - Your database user
+- **password** - Database password
+- **host** - Database server address (e.g., `localhost`, `db.example.com`)
+- **port** - PostgreSQL port (default: `5432`)
+- **database_name** - Name of your database
+
+**Example for cloud providers:**
+```bash
+# Heroku
+DATABASE_URL=postgres://user:pass@ec2-xx-xxx-xxx-xx.compute-1.amazonaws.com:5432/dbname
+
+# Railway
+DATABASE_URL=postgresql://user:pass@containers-us-west-xxx.railway.app:5432/railway
+
+# Supabase
+DATABASE_URL=postgresql://postgres:pass@db.xxxxxxxxxxxxx.supabase.co:5432/postgres
+```
+
+</Accordion>
+
+## Database Synchronization
+
+The database connection and synchronization happen in `src/server.js`:
+
+```javascript src/server.js
+const app = require('./app');
+const sequelize = require('./utils/connection');
+
+const PORT = process.env.PORT || 8080;
+
+const main = async () => {
+    try {
+        sequelize.sync();
+        console.log("DB connected");
+        app.listen(PORT);
+        console.log(`👉 Server running on port ${PORT}`);
+    } catch (error) {
+        console.log(error)
+    }
+}
+
+main();
+```
+
+<Steps>
+  <Step title="Import Connection">
+    The Sequelize instance is imported from `utils/connection.js`
+  </Step>
+  
+  <Step title="Sync Models">
+    `sequelize.sync()` creates tables based on defined models
+  </Step>
+  
+  <Step title="Start Server">
+    Once the database is connected, the Express server starts listening
+  </Step>
+</Steps>
+
+### Sync Options
+
+You can customize the `sync()` behavior:
+
+```javascript
+// Default: creates tables if they don't exist
+sequelize.sync()
+
+// Force: drops and recreates all tables (⚠️ deletes all data)
+sequelize.sync({ force: true })
+
+// Alter: modifies existing tables to match models (safer than force)
+sequelize.sync({ alter: true })
+```
+
+<Warning>
+**Never use `{ force: true }` in production!** It will delete all your data. Use migrations instead for production database changes.
+</Warning>
+
+## Creating Models
+
+While the template doesn't include pre-defined models, here's how to create them:
+
+### Step-by-Step Model Creation
+
+<Steps>
+  <Step title="Create Model Directory">
+    Create a `src/models/` directory for your models
+  </Step>
+  
+  <Step title="Define Your Model">
+    Create a model file (e.g., `User.js`)
+  </Step>
+  
+  <Step title="Import in Routes">
+    Use the model in your route controllers
+  </Step>
+</Steps>
+
+### Example: User Model
+
+Create `src/models/User.js`:
+
+```javascript src/models/User.js
+const { DataTypes } = require('sequelize');
+const sequelize = require('../utils/connection');
+
+const User = sequelize.define('user', {
+    firstName: {
+        type: DataTypes.STRING,
+        allowNull: false,
+        validate: {
+            notEmpty: {
+                msg: 'First name is required'
+            }
+        }
+    },
+    lastName: {
+        type: DataTypes.STRING,
+        allowNull: false
+    },
+    email: {
+        type: DataTypes.STRING,
+        allowNull: false,
+        unique: true,
+        validate: {
+            isEmail: {
+                msg: 'Invalid email format'
+            }
+        }
+    },
+    password: {
+        type: DataTypes.STRING,
+        allowNull: false
+    }
+});
+
+module.exports = User;
+```
+
+<Tip>
+Sequelize automatically adds `id`, `createdAt`, and `updatedAt` fields to your models unless you disable them.
+</Tip>
+
+### Using Models in Controllers
+
+```javascript src/controllers/user.controller.js
+const User = require('../models/User');
+const catchError = require('../utils/catchError');
+
+// Get all users
+const getAll = catchError(async (req, res) => {
+    const users = await User.findAll();
+    return res.json(users);
+});
+
+// Create a user
+const create = catchError(async (req, res) => {
+    const user = await User.create(req.body);
+    return res.status(201).json(user);
+});
+
+// Get user by ID
+const getOne = catchError(async (req, res) => {
+    const { id } = req.params;
+    const user = await User.findByPk(id);
+    if (!user) return res.status(404).json({ message: 'User not found' });
+    return res.json(user);
+});
+
+// Update user
+const update = catchError(async (req, res) => {
+    const { id } = req.params;
+    const user = await User.update(req.body, {
+        where: { id },
+        returning: true
+    });
+    return res.json(user);
+});
+
+// Delete user
+const remove = catchError(async (req, res) => {
+    const { id } = req.params;
+    await User.destroy({ where: { id } });
+    return res.sendStatus(204);
+});
+
+module.exports = {
+    getAll,
+    create,
+    getOne,
+    update,
+    remove
+};
+```
+
+<Note>
+Always wrap async controllers with `catchError` to ensure errors are passed to the error handler middleware.
+</Note>
+
+## Model Associations
+
+Define relationships between models:
+
+```javascript
+const User = require('./User');
+const Post = require('./Post');
+const Comment = require('./Comment');
+
+// One-to-Many: User has many Posts
+User.hasMany(Post);
+Post.belongsTo(User);
+
+// One-to-Many: Post has many Comments
+Post.hasMany(Comment);
+Comment.belongsTo(Post);
+
+// Many-to-Many: Users and Roles
+const UserRole = sequelize.define('user_role', {});
+User.belongsToMany(Role, { through: UserRole });
+Role.belongsToMany(User, { through: UserRole });
+```
+
+### Querying with Associations
+
+```javascript
+// Get user with all their posts
+const user = await User.findByPk(1, {
+    include: [Post]
+});
+
+// Get post with author and comments
+const post = await Post.findByPk(1, {
+    include: [
+        { model: User, attributes: ['firstName', 'lastName'] },
+        { model: Comment }
+    ]
+});
+```
+
+## Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Use Validations" icon="check-double">
+    Define validations in your models to ensure data integrity before it hits the database.
+  </Card>
+  
+  <Card title="Index Important Fields" icon="magnifying-glass">
+    Add indexes to frequently queried fields for better performance.
+  </Card>
+  
+  <Card title="Use Transactions" icon="money-bill-transfer">
+    Wrap multiple operations in transactions to ensure data consistency.
+  </Card>
+  
+  <Card title="Avoid N+1 Queries" icon="bolt">
+    Use `include` to eager load associations instead of making separate queries.
+  </Card>
+</CardGroup>
+
+### Transaction Example
+
+```javascript
+const createUserWithProfile = catchError(async (req, res) => {
+    const t = await sequelize.transaction();
+    
+    try {
+        const user = await User.create(req.body.user, { transaction: t });
+        const profile = await Profile.create(
+            { ...req.body.profile, userId: user.id },
+            { transaction: t }
+        );
+        
+        await t.commit();
+        return res.status(201).json({ user, profile });
+    } catch (error) {
+        await t.rollback();
+        throw error;
+    }
+});
+```
+
+## Connection Pooling
+
+For production, configure connection pooling:
+
+```javascript src/utils/connection.js
+const sequelize = new Sequelize(process.env.DATABASE_URL, {
+    logging: false,
+    pool: {
+        max: 5,          // Maximum connections
+        min: 0,          // Minimum connections
+        acquire: 30000,  // Max time to acquire connection (ms)
+        idle: 10000      // Max idle time before releasing (ms)
+    }
+});
+```
+
+<Tip>
+Adjust pool settings based on your application's needs and database server capacity. For most applications, 5-10 max connections is sufficient.
+</Tip>
+
+## Testing the Connection
+
+Verify your database connection:
+
+```javascript
+const sequelize = require('./utils/connection');
+
+sequelize.authenticate()
+    .then(() => console.log('Database connected successfully'))
+    .catch(err => console.error('Unable to connect:', err));
+```
+
+## Common Issues
+
+<Accordion title="Connection Refused">
+  
+**Error**: `ECONNREFUSED` or `Connection refused`
+
+**Solutions**:
+- Verify PostgreSQL is running: `pg_isready` or `sudo service postgresql status`
+- Check DATABASE_URL format
+- Ensure correct host and port
+- Verify firewall settings
+
+</Accordion>
+
+<Accordion title="Authentication Failed">
+  
+**Error**: `password authentication failed for user`
+
+**Solutions**:
+- Double-check username and password in DATABASE_URL
+- Verify user exists in PostgreSQL
+- Check PostgreSQL authentication settings (`pg_hba.conf`)
+
+</Accordion>
+
+<Accordion title="Database Does Not Exist">
+  
+**Error**: `database "name" does not exist`
+
+**Solutions**:
+- Create the database: `createdb database_name`
+- Or in PostgreSQL: `CREATE DATABASE database_name;`
+- Verify the database name in your DATABASE_URL
+
+</Accordion>
+
+## Next Steps
+
+<CardGroup cols={3}>
+  <Card title="Middleware" icon="layer-group" href="/core/middleware">
+    Learn about the middleware stack
+  </Card>
+  
+  <Card title="Error Handling" icon="triangle-exclamation" href="/core/middleware#error-handling">
+    Handle database errors properly
+  </Card>
+  
+  <Card title="API Routes" icon="route" href="/guides/routing">
+    Create CRUD endpoints for your models
+  </Card>
+</CardGroup>

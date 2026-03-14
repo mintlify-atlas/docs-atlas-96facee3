@@ -1,0 +1,234 @@
+---
+title: 'Error Handler'
+description: 'Centralized error handling middleware for Express applications'
+---
+
+## Overview
+
+The `errorHandler` middleware provides centralized error handling for your Express application. It catches and processes errors from Sequelize operations and other application errors, returning appropriate HTTP responses with meaningful error messages.
+
+## Function Signature
+
+```javascript
+errorHandler(error, req, res, next)
+```
+
+<ParamField path="error" type="Error" required>
+  The error object thrown by the application or middleware
+</ParamField>
+
+<ParamField path="req" type="Request">
+  Express request object (unused in this middleware)
+</ParamField>
+
+<ParamField path="res" type="Response" required>
+  Express response object used to send error responses
+</ParamField>
+
+<ParamField path="next" type="NextFunction">
+  Express next function (unused in this middleware)
+</ParamField>
+
+## Error Types
+
+### SequelizeValidationError
+
+Handles validation errors from Sequelize models, such as required fields, format validation, and custom validators.
+
+<ResponseField name="status" type="number">
+  400 (Bad Request)
+</ResponseField>
+
+<ResponseField name="body" type="object">
+  Object mapping field names to error messages
+</ResponseField>
+
+**Example Response:**
+```json
+{
+  "email": "Email must be unique",
+  "username": "Username is required"
+}
+```
+
+### SequelizeForeignKeyConstraintError
+
+Handles foreign key constraint violations, such as referencing non-existent records or violating referential integrity.
+
+<ResponseField name="status" type="number">
+  400 (Bad Request)
+</ResponseField>
+
+<ResponseField name="message" type="string">
+  Error message from Sequelize
+</ResponseField>
+
+<ResponseField name="error" type="string">
+  Detailed constraint error information
+</ResponseField>
+
+**Example Response:**
+```json
+{
+  "message": "Foreign key constraint error",
+  "error": "Key (user_id)=(999) is not present in table \"users\"."
+}
+```
+
+### SequelizeDatabaseError
+
+Handles database-related errors, such as syntax errors, connection issues, or invalid operations.
+
+<ResponseField name="status" type="number">
+  400 (Bad Request)
+</ResponseField>
+
+<ResponseField name="message" type="string">
+  Error message describing the database error
+</ResponseField>
+
+**Example Response:**
+```json
+{
+  "message": "column \"invalid_column\" does not exist"
+}
+```
+
+### Generic Errors
+
+All other errors are treated as internal server errors.
+
+<ResponseField name="status" type="number">
+  500 (Internal Server Error)
+</ResponseField>
+
+<ResponseField name="message" type="string">
+  Error message
+</ResponseField>
+
+<ResponseField name="error" type="object">
+  Full error object with stack trace
+</ResponseField>
+
+**Example Response:**
+```json
+{
+  "message": "Something went wrong",
+  "error": { /* full error object */ }
+}
+```
+
+## Implementation
+
+```javascript src/utils/errorHandler.js
+const errorHandler = (error, _req, res, _next) => {
+    if(error.name === 'SequelizeValidationError') {
+        const errObj = {};
+        error.errors.map(er => {
+            errObj[er.path] = er.message;
+        })
+        return res.status(400).json(errObj);
+    }
+    if(error.name === 'SequelizeForeignKeyConstraintError'){
+        return res.status(400).json({ 
+            message: error.message,
+            error: error.parent.detail
+        });
+    }
+    if(error.name === 'SequelizeDatabaseError'){
+        return res.status(400).json({ 
+            message: error.message
+        });
+    }
+    return res.status(500).json({
+        message: error.message,
+        error: error
+    });
+}
+
+module.exports = errorHandler;
+```
+
+## Usage
+
+### Basic Setup
+
+Register the error handler as the **last middleware** in your Express application:
+
+```javascript src/app.js
+const express = require('express');
+const errorHandler = require('./utils/errorHandler');
+const router = require('./routes');
+
+const app = express();
+
+// Other middlewares
+app.use(express.json());
+
+// Routes
+app.use(router);
+
+// Error handler MUST be registered after all routes
+app.use(errorHandler);
+
+module.exports = app;
+```
+
+<Warning>
+  The error handler must be registered **after** all routes and other middleware. Express processes middleware in the order they are registered, and error-handling middleware must come last to catch errors from previous middleware.
+</Warning>
+
+### With Async Routes
+
+Combine with the [catchError utility](/utilities/catch-error) to handle errors from async route handlers:
+
+```javascript
+const catchError = require('./utils/catchError');
+const User = require('./models/User');
+
+router.post('/users', catchError(async (req, res) => {
+    const user = await User.create(req.body);
+    res.status(201).json(user);
+}));
+```
+
+If `User.create()` throws a validation error, it will be caught by `catchError` and passed to the `errorHandler` middleware.
+
+## Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Consistent Error Responses" icon="check">
+    The error handler ensures all errors follow a consistent response format, making it easier for frontend applications to handle errors.
+  </Card>
+  
+  <Card title="User-Friendly Messages" icon="message">
+    Validation errors are transformed into field-level error messages that can be easily displayed in forms.
+  </Card>
+  
+  <Card title="Production Security" icon="shield">
+    In production, consider removing the full error object from 500 responses to avoid exposing sensitive information.
+  </Card>
+  
+  <Card title="Logging" icon="file-lines">
+    Consider adding error logging (e.g., Winston, Morgan) before sending the response for debugging and monitoring.
+  </Card>
+</CardGroup>
+
+<Tip>
+  For production environments, modify the generic error handler to log the full error server-side while returning a sanitized response to the client:
+  
+  ```javascript
+  // In production
+  if (process.env.NODE_ENV === 'production') {
+    console.error(error); // or use a proper logging service
+    return res.status(500).json({
+      message: 'Internal server error'
+    });
+  }
+  ```
+</Tip>
+
+## Related
+
+- [CatchError Utility](/utilities/catch-error) - Wrap async route handlers to propagate errors
+- [Database Connection](/utilities/database-connection) - Sequelize configuration and setup
