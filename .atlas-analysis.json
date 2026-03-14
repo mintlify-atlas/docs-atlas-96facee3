@@ -1,0 +1,59 @@
+{
+  "projectType": "api-service",
+  "projectName": "Backend Template",
+  "projectDescription": "A production-ready Express.js backend template with PostgreSQL, Sequelize ORM, authentication, and security middleware.",
+  "theme": "aspen",
+  "primaryColor": "#10b981",
+  "lightColor": "#34d399",
+  "darkColor": "#059669",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": ["introduction", "quickstart"]
+          },
+          {
+            "group": "Core Concepts",
+            "pages": ["core/architecture", "core/database", "core/middleware"]
+          },
+          {
+            "group": "Guides",
+            "pages": ["guides/environment-setup", "guides/routing", "guides/error-handling", "guides/authentication"]
+          },
+          {
+            "group": "Utilities",
+            "pages": ["utilities/error-handler", "utilities/catch-error", "utilities/database-connection"]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "Overview",
+            "pages": ["api/overview"]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "Express.js v5 server with security middleware (Helmet, CORS)",
+    "PostgreSQL integration with Sequelize ORM",
+    "JWT authentication with bcrypt password hashing",
+    "Cloudinary integration for media management",
+    "Centralized error handling for Sequelize and custom errors",
+    "Development and production environment support"
+  ],
+  "publicApiSurface": [
+    "GET / - Welcome endpoint",
+    "Express app with JSON parsing middleware",
+    "Router for custom API routes",
+    "errorHandler middleware",
+    "catchError utility for async route handlers",
+    "Sequelize database connection"
+  ]
+}
